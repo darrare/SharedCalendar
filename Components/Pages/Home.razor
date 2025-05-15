@@ -1,7 +1,20 @@
 ﻿@page "/"
+@using SharedCalendar.Data
 
 <PageTitle>Home</PageTitle>
 
 <h1>Hello, world!</h1>
 
 Welcome to your new app.
+
+
+@inject AppDbContext Db
+
+@if (Db.Database.CanConnect())
+{
+    <p>Database connection: ✅ OK</p>
+}
+else
+{
+    <p>Database connection: ❌ Failed</p>
+}
