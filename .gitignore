@@ -3,6 +3,12 @@
 ##
 ## Get latest from `dotnet new gitignore`
 
+# ignore development appsettings so we don't commit passwords
+appsettings.Development.json
+
+
+
+
 # dotenv files
 .env
 
