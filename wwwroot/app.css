@@ -27,3 +27,37 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+
+/*.calendar-table td {
+    width: 100px;
+    height: 80px;
+    vertical-align: top;
+    cursor: pointer;
+}
+
+.calendar-event {
+    background-color: #007bff;
+    color: white;
+    padding: 2px 4px;
+    margin-top: 2px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    cursor: pointer;
+}
+
+.modal {
+    display: block;*/ /* override default hidden */
+    /*background-color: rgba(0,0,0,0.5);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    overflow: auto;
+    z-index: 1050;
+}
+
+.modal-dialog {
+    margin: 10% auto;
+}*/

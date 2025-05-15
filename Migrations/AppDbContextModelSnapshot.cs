@@ -22,7 +22,7 @@ namespace SharedCalendar.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("SharedCalendar.Models.Message", b =>
+            modelBuilder.Entity("SharedCalendar.Models.CalendarEvent", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
@@ -30,20 +30,22 @@ namespace SharedCalendar.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("SentAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Text")
-                        .IsRequired()
+                    b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<string>("User")
+                    b.Property<DateTime>("EndDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("StartDateTime")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Messages");
+                    b.ToTable("CalendarEvents");
                 });
 #pragma warning restore 612, 618
         }
