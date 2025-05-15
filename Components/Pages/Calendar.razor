@@ -248,12 +248,20 @@
 
     private async Task DeleteEvent()
     {
-        if (editingEvent.Id != 0)
+        var eventToDelete = await Db.CalendarEvents.FindAsync(editingEvent.Id);
+
+        if (eventToDelete == null && editingEvent.Id != 0)
         {
-            Db.CalendarEvents.Remove(editingEvent);
+            eventToDelete = editingEvent;
+        }
+
+        if (eventToDelete is not null)
+        {
+            Db.CalendarEvents.Remove(eventToDelete);
             await Db.SaveChangesAsync();
-            await LoadEvents();
+
             await JS.InvokeVoidAsync("bootstrapInterop.hideModal", "eventModal");
+            await LoadEvents();
 
             if (hubConnection is not null)
             {
