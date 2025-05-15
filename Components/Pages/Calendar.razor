@@ -1,0 +1,288 @@
+﻿@page "/calendar"
+@using Microsoft.EntityFrameworkCore
+@using SharedCalendar.Data
+@using SharedCalendar.Models
+@using Microsoft.AspNetCore.SignalR.Client
+@inject AppDbContext Db
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+@rendermode InteractiveServer
+
+<h3>Calendar</h3>
+
+<button class="btn btn-secondary me-2" @onclick="async () => await PreviousMonth()">Previous</button>
+<button class="btn btn-secondary me-2" @onclick="async () => await NextMonth()">Next</button>
+<span class="fw-bold">@currentMonth.ToString("MMMM yyyy")</span>
+
+<table class="table table-bordered mt-3 calendar-table">
+    <thead>
+        <tr>
+            @foreach (var dayName in dayNames)
+            {
+                <th>@dayName</th>
+            }
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var week in calendarWeeks)
+        {
+            <tr>
+                @foreach (var day in week)
+                {
+                    <td class="@GetDayCss(day)" @onclick="() => OnDayClick(day)">
+                        <div>@day.Day</div>
+                        @foreach (var ev in CalendarEvents.Where(e =>
+                       e.StartDateTime.Date <= day.Date && e.EndDateTime.Date >= day.Date))
+                        {
+                            <div class="calendar-event small bg-primary text-white p-1 rounded mt-1"
+                            @onclick:stopPropagation
+                                 @onclick="() => OnEventClick(ev)">
+                                @ev.Title
+                            </div>
+                        }
+                    </td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+
+<!-- Modal -->
+<div class="modal fade" id="eventModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <EditForm Model="editingEvent" OnValidSubmit="SaveEvent">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@((editingEvent.Id == 0) ? "Add Event" : "Edit Event")</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        <InputText class="form-control" @bind-Value="editingEvent.Title" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Start Date</label>
+                        <InputDate class="form-control" @bind-Value="startDate" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Start Time (UTC)</label>
+                        <InputText type="time" class="form-control" @bind-Value="startTimeString" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">End Date</label>
+                        <InputDate class="form-control" @bind-Value="endDate" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">End Time (UTC)</label>
+                        <InputText type="time" class="form-control" @bind-Value="endTimeString" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <InputTextArea class="form-control" @bind-Value="editingEvent.Description" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    @if (editingEvent.Id != 0)
+                    {
+                        <button type="button" class="btn btn-danger me-auto" @onclick="DeleteEvent">Delete</button>
+                    }
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private DateTime currentMonth = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+    private List<List<DateTime>> calendarWeeks = new();
+    private List<CalendarEvent> CalendarEvents = new();
+    private CalendarEvent editingEvent = new();
+    private DateTime startDate;
+    private DateTime endDate;
+    private string startTimeString = "09:00";
+    private string endTimeString = "10:00";
+
+    private string[] dayNames = new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEvents();
+        BuildCalendar();
+
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Nav.ToAbsoluteUri("/calendarHub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        hubConnection.On("ReceiveEventUpdate", async () =>
+        {
+            await LoadEvents();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private void BuildCalendar()
+    {
+        calendarWeeks.Clear();
+        var firstDay = currentMonth.AddDays(-(int)currentMonth.DayOfWeek);
+
+        for (int week = 0; week < 6; week++)
+        {
+            var weekDays = new List<DateTime>();
+            for (int day = 0; day < 7; day++)
+            {
+                weekDays.Add(firstDay.AddDays(week * 7 + day));
+            }
+            calendarWeeks.Add(weekDays);
+        }
+    }
+
+    private async Task LoadEvents()
+    {
+        var startDateUtc = currentMonth.AddDays(-(int)currentMonth.DayOfWeek);
+        var endDateUtc = startDateUtc.AddDays(42);
+
+        CalendarEvents = await Db.CalendarEvents
+            .Where(e => e.EndDateTime >= startDateUtc && e.StartDateTime < endDateUtc)
+            .ToListAsync();
+    }
+
+    private string GetDayCss(DateTime day)
+    {
+        var css = "";
+        if (day.Month != currentMonth.Month) css += " text-muted";
+        if (day.Date == DateTime.UtcNow.Date) css += " bg-info text-white";
+        return css;
+    }
+
+    private async void OnDayClick(DateTime day)
+    {
+        editingEvent = new CalendarEvent();
+        startDate = day.Date;
+        endDate = day.Date;
+        startTimeString = "09:00";
+        endTimeString = "10:00";
+
+        await JS.InvokeVoidAsync("bootstrapInterop.showModal", "eventModal");
+    }
+
+    private async void OnEventClick(CalendarEvent ev)
+    {
+        editingEvent = new CalendarEvent
+            {
+                Id = ev.Id,
+                Title = ev.Title,
+                Description = ev.Description,
+                StartDateTime = ev.StartDateTime,
+                EndDateTime = ev.EndDateTime
+            };
+
+        startDate = editingEvent.StartDateTime.Date;
+        endDate = editingEvent.EndDateTime.Date;
+        startTimeString = editingEvent.StartDateTime.ToString("HH:mm");
+        endTimeString = editingEvent.EndDateTime.ToString("HH:mm");
+
+        await JS.InvokeVoidAsync("bootstrapInterop.showModal", "eventModal");
+    }
+
+    private async Task SaveEvent()
+    {
+        try
+        {
+            var startTs = TimeSpan.Parse(startTimeString);
+            var endTs = TimeSpan.Parse(endTimeString);
+
+            editingEvent.StartDateTime = startDate.Add(startTs);
+            editingEvent.EndDateTime = endDate.Add(endTs);
+
+            if (editingEvent.Id == 0)
+            {
+                Db.CalendarEvents.Add(editingEvent);
+            }
+            else
+            {
+                var existingEvent = await Db.CalendarEvents.FindAsync(editingEvent.Id);
+                if (existingEvent != null)
+                {
+                    // Update properties on the tracked entity
+                    existingEvent.Title = editingEvent.Title;
+                    existingEvent.Description = editingEvent.Description;
+                    existingEvent.StartDateTime = editingEvent.StartDateTime;
+                    existingEvent.EndDateTime = editingEvent.EndDateTime;
+                } 
+                else
+                {
+                    Db.CalendarEvents.Update(editingEvent);
+                }
+            }
+
+            await Db.SaveChangesAsync();
+            await LoadEvents();
+            await JS.InvokeVoidAsync("bootstrapInterop.hideModal", "eventModal");
+
+            if (hubConnection is not null)
+            {
+                await hubConnection.InvokeAsync("NotifyEventChanged");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+
+    }
+
+    private async Task DeleteEvent()
+    {
+        if (editingEvent.Id != 0)
+        {
+            Db.CalendarEvents.Remove(editingEvent);
+            await Db.SaveChangesAsync();
+            await LoadEvents();
+            await JS.InvokeVoidAsync("bootstrapInterop.hideModal", "eventModal");
+
+            if (hubConnection is not null)
+            {
+                await hubConnection.InvokeAsync("NotifyEventChanged");
+            }
+        }
+    }
+
+    private async Task PreviousMonth()
+    {
+        currentMonth = currentMonth.AddMonths(-1);
+        BuildCalendar();
+        await LoadEvents();
+        StateHasChanged();
+    }
+
+    private async Task NextMonth()
+    {
+        currentMonth = currentMonth.AddMonths(1);
+        BuildCalendar();
+        await LoadEvents();
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

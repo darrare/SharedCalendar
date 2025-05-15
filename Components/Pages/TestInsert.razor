@@ -1,0 +1,42 @@
+﻿@page "/test-insert"
+@using SharedCalendar.Data
+@using SharedCalendar.Models
+@rendermode InteractiveServer
+@inject AppDbContext Db
+
+<h3>Test Insert</h3>
+
+<button @onclick="InsertTestRecord">Insert Test Record</button>
+
+@if (result != null)
+{
+    <p>@result</p>
+}
+
+@code {
+    private string result;
+
+    private async Task InsertTestRecord()
+    {
+        result = "INSERTING";
+        StateHasChanged();
+        try
+        {
+            var newEvent = new CalendarEvent
+                {
+                    Title = "Test Event",
+                    StartDateTime = DateTime.UtcNow
+                };
+
+            Db.CalendarEvents.Add(newEvent);
+            await Db.SaveChangesAsync();
+            result = $"Inserted event with ID: {newEvent.Id}";
+        }
+        catch (Exception ex)
+        {
+            result = $"Error: {ex.Message}";
+        }
+        Console.WriteLine(result);
+        StateHasChanged();
+    }
+}
