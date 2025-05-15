@@ -12,8 +12,11 @@ builder.Services.AddRazorComponents()
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", false);
 
+var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection");
+
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
 
 builder.Services.AddSignalR();
